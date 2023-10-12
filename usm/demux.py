@@ -1,20 +1,24 @@
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
-from enum import Enum
 from io import FileIO, BytesIO
-from logging import getLogger
-from os.path import basename, splitext
 from pathlib import Path
-from queue import SimpleQueue
+from enum import Enum
 from struct import Struct
-
+from dataclasses import dataclass
+from logging import getLogger
+from queue import SimpleQueue
+from concurrent.futures import ThreadPoolExecutor
 from .decrypt import VideoDecrypter
-from .keys import star_rail
-
 pool = ThreadPoolExecutor()
-_key_collection = {}
 logger = getLogger('CriUsmDemuxer.Demuxer')
 _usm_header_struct = Struct(r'>4sLxBHBxxBLL8x')
+
+
+def _load_keys():
+	import json
+	with (Path(__file__).parent / 'keys.json').open('rb') as f:
+		return json.load(f)
+
+
+keys = _load_keys()
 
 
 # copy from wannacri
@@ -65,10 +69,18 @@ class UsmHeader:
 
 class UsmDemuxer:
 	def __init__(self, video_path):
-		self._name = splitext(basename(video_path))[0]
-		encrypted_audio, key_map = star_rail
-		key = key_map.get(self._name, 0)
-		self._f = UsmFile(video_path)
+		video_path = Path(video_path)
+		self._name = video_path.stem
+		key = 0
+		encrypted_audio = False
+		for i in keys.values():
+			tmp_encrypted_audio, key_map = i['Encrytion'], i['KeyMap']
+			tmp_key = key_map.get(video_path.stem, None)
+			if tmp_key:
+				encrypted_audio = tmp_encrypted_audio
+				key = tmp_key
+				break
+		self._f = UsmFile(str(video_path))
 		self._usm_decrypter = None
 		self._thread_ref_total = 1
 		if key:
@@ -81,17 +93,17 @@ class UsmDemuxer:
 	def export(self, output_path: str, chunk_filter_config=None):
 		output_path = Path(output_path)
 		# 初始化线程
-		logger.debug(r'Initialize the write thread')
+		logger.debug(r'初始化写入线程')
 		writer_queue = SimpleQueue()
 		writing_thread = pool.submit(self._writing_loop, output_path, writer_queue)
 		video_queue = writer_queue
 		audio_queue = writer_queue
 		if self._usm_decrypter:
-			logger.debug(r'Initialize the video decryption thread')
+			logger.debug(r'初始化视频解密线程')
 			video_queue = SimpleQueue()
 			encrypted_video_thread = pool.submit(self._decrypt_loop,self._usm_decrypter.decrypt_video , video_queue, writer_queue)
 			if self._thread_ref_total == 2:
-				logger.debug(r'Initialize the audio decryption thread')
+				logger.debug(r'初始化音频解密线程')
 				audio_queue = SimpleQueue()
 				encrypted_audio_thread = pool.submit(self._decrypt_loop, self._usm_decrypter.crypt_audio, audio_queue, writer_queue)
 
@@ -107,10 +119,10 @@ class UsmDemuxer:
 			writer_queue.put((None, None))
 		else:
 			video_queue.put((None, None))
-			logger.debug('Send video end command')
+			logger.debug('发送视频结束命令')
 			encrypted_video_thread.result()
 			if self._thread_ref_total == 2:
-				logger.debug('Send audio end command')
+				logger.debug('发送音频结束命令')
 				audio_queue.put((None, None))
 				encrypted_audio_thread.result()
 		return writing_thread.result()
@@ -129,7 +141,7 @@ class UsmDemuxer:
 
 	def _writing_loop(self, output_path: Path, queue:SimpleQueue):
 		logger= getLogger('CriUsmDemuxer.writer')
-		logger.debug(r'enter success')
+		logger.debug(r'进入成功')
 		count = self._thread_ref_total
 		audio_cache = {}
 		video = None
@@ -158,12 +170,12 @@ class UsmDemuxer:
 					audio_cache[header.chno] = writer
 				writer.write(data)
 
-		logger.debug('quit')
+		logger.debug('退出')
 		if video_output:
-			logger.debug('close video file')
+			logger.debug('关闭视频文件')
 			video_output.close()
 		for inno, buffer in audio_cache.items():
-			logger.debug(f'close audio file{inno}')
+			logger.debug(f'关闭音频文件{inno}')
 			audio_name = output_path / (self._name + f'_{inno}.adx')
 			audios[inno] = audio_name
 			with FileIO(audio_name, 'wb') as f:

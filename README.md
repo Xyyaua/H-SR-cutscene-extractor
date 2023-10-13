@@ -5,7 +5,6 @@ USM/cg extractor for HSR, made using PyCRIusm
 **prerequisite:**
 python, 
 FFMPEG.EXE(Put in Repo)
-Cython
 
 **Installing**
 1. clone this repo

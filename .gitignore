@@ -1,0 +1,6 @@
+# ffmpeg
+ffmpeg.exe
+
+# something files
+/output
+*/__pycache__

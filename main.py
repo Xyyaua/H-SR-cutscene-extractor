@@ -179,5 +179,9 @@ def run():
 
 if __name__ == '__main__':
     os.system("cls")
+    if not os.path.exists("./output"):
+        os.mkdir("./output")
+        os.mkdir("./output/converted")
+        os.mkdir("./output/final") 
     run()
     input()

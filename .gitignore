@@ -4,3 +4,5 @@ ffmpeg.exe
 # something files
 /output
 */__pycache__
+/.vscode
+usm/decrypt.pyd.old

@@ -174,7 +174,7 @@ def run():
         os.system(f"start {ofimerg}")
     else:
         pass
-    print("Press Any Key To Exit")
+    os._exit()
 
 
 if __name__ == '__main__':
